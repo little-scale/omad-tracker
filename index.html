@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OMAD Meal Tracker</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 20px; }
+        .meal { border: 1px solid #ccc; padding: 10px; background: #f9f9f9; position: relative; }
+        img { width: 100%; max-height: 150px; object-fit: cover; }
+        input, textarea { width: 90%; margin: 5px 0; padding: 5px; }
+        .delete-btn { background: red; color: white; border: none; padding: 5px; cursor: pointer; position: absolute; top: 5px; right: 5px; }
+    </style>
+</head>
+<body>
+
+    <h2>OMAD Meal Tracker</h2>
+    
+    <input type="file" accept="image/*" id="photoInput"><br>
+    <textarea id="comment" placeholder="Add a comment..."></textarea><br>
+    
+    <input type="number" id="weight" placeholder="Meal Weight (g)"><br>
+    <input type="number" id="carbs" placeholder="Carbs (g)"><br>
+    <input type="number" id="fats" placeholder="Fats (g)"><br>
+    <input type="number" id="protein" placeholder="Protein (g)"><br>
+    <input type="number" id="calories" placeholder="Calories (kcal)"><br>
+
+    <button onclick="addMeal()">Save Meal</button>
+    <button onclick="exportMeals()">Export Grid</button>
+    <button onclick="exportData()">Backup Data</button>
+    <input type="file" id="importFile" onchange="importData(event)">
+    
+    <div id="mealGrid" class="grid"></div>
+
+    <script>
+        let db;
+
+        // Initialize IndexedDB
+        function initDB() {
+            let request = indexedDB.open("MealTrackerDB", 1);
+
+            request.onupgradeneeded = function(event) {
+                let db = event.target.result;
+                let store = db.createObjectStore("meals", { keyPath: "id", autoIncrement: true });
+                store.createIndex("timestamp", "timestamp", { unique: false });
+            };
+
+            request.onsuccess = function(event) {
+                db = event.target.result;
+                displayMeals();
+            };
+
+            request.onerror = function(event) {
+                console.log("Error opening IndexedDB:", event.target.error);
+            };
+        }
+
+        function addMeal() {
+            const fileInput = document.getElementById("photoInput");
+            const commentInput = document.getElementById("comment").value;
+            const weight = document.getElementById("weight").value;
+            const carbs = document.getElementById("carbs").value;
+            const fats = document.getElementById("fats").value;
+            const protein = document.getElementById("protein").value;
+            const calories = document.getElementById("calories").value;
+            
+            if (fileInput.files.length === 0) {
+                alert("Please select an image.");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const imageData = event.target.result;
+                const timestamp = new Date().toLocaleString();
+
+                navigator.geolocation.getCurrentPosition(position => {
+                    const location = {
+                        lat: position.coords.latitude,
+                        lon: position.coords.longitude
+                    };
+
+                    saveMeal({ imageData, timestamp, comment: commentInput, weight, carbs, fats, protein, calories, location });
+                }, error => {
+                    console.log("Geolocation error:", error);
+                    saveMeal({ imageData, timestamp, comment: commentInput, weight, carbs, fats, protein, calories, location: null });
+                });
+            };
+            reader.readAsDataURL(fileInput.files[0]);
+        }
+
+        function saveMeal(meal) {
+            let transaction = db.transaction(["meals"], "readwrite");
+            let store = transaction.objectStore("meals");
+            store.add(meal);
+
+            transaction.oncomplete = function() {
+                displayMeals();
+            };
+        }
+
+        function displayMeals() {
+            const mealGrid = document.getElementById("mealGrid");
+            mealGrid.innerHTML = "";
+
+            let transaction = db.transaction(["meals"], "readonly");
+            let store = transaction.objectStore("meals");
+            let request = store.getAll();
+
+            request.onsuccess = function() {
+                let meals = request.result;
+
+                meals.forEach(meal => {
+                    const mealDiv = document.createElement("div");
+                    mealDiv.classList.add("meal");
+                    mealDiv.innerHTML = `
+                        <button class="delete-btn" onclick="deleteMeal(${meal.id})">X</button>
+                        <img src="${meal.imageData}" alt="Meal">
+                        <p>${meal.timestamp}</p>
+                        <p>${meal.comment}</p>
+                        ${meal.location ? `<p>📍 ${meal.location.lat}, ${meal.location.lon}</p>` : ""}
+                        <p><b>Weight:</b> ${meal.weight}g</p>
+                        <p><b>Carbs:</b> ${meal.carbs}g | <b>Fats:</b> ${meal.fats}g</p>
+                        <p><b>Protein:</b> ${meal.protein}g | <b>Calories:</b> ${meal.calories} kcal</p>
+                    `;
+                    mealGrid.appendChild(mealDiv);
+                });
+            };
+        }
+
+        function deleteMeal(id) {
+            let transaction = db.transaction(["meals"], "readwrite");
+            let store = transaction.objectStore("meals");
+            store.delete(id);
+
+            transaction.oncomplete = function() {
+                displayMeals();
+            };
+        }
+
+        function exportData() {
+            let transaction = db.transaction(["meals"], "readonly");
+            let store = transaction.objectStore("meals");
+            let request = store.getAll();
+
+            request.onsuccess = function() {
+                let meals = request.result;
+                let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(meals));
+                let downloadAnchor = document.createElement("a");
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", "meals_backup.json");
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+            };
+        }
+
+        function importData(event) {
+            let file = event.target.files[0];
+            if (!file) return;
+
+            let reader = new FileReader();
+            reader.onload = function(e) {
+                let importedMeals = JSON.parse(e.target.result);
+                
+                let transaction = db.transaction(["meals"], "readwrite");
+                let store = transaction.objectStore("meals");
+
+                importedMeals.forEach(meal => store.add(meal));
+
+                transaction.oncomplete = function() {
+                    alert("Data imported successfully!");
+                    displayMeals();
+                };
+            };
+            reader.readAsText(file);
+        }
+
+        function exportMeals() {
+            const mealGrid = document.getElementById("mealGrid");
+            html2canvas(mealGrid).then(canvas => {
+                const imgURL = canvas.toDataURL("image/png");
+                const newTab = window.open();
+                newTab.document.write('<img src="' + imgURL + '">');
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", initDB);
+
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+</body>
+</html>
