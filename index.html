@@ -76,19 +76,33 @@
                 const timestamp = new Date().toLocaleString();
 
                 navigator.geolocation.getCurrentPosition(position => {
-                    const location = {
-                        lat: position.coords.latitude,
-                        lon: position.coords.longitude
-                    };
+    let lat = position.coords.latitude;
+    let lon = position.coords.longitude;
 
-                    saveMeal({ imageData, timestamp, comment: commentInput, weight, carbs, fats, protein, calories, location });
-                }, error => {
-                    console.log("Geolocation error:", error);
-                    saveMeal({ imageData, timestamp, comment: commentInput, weight, carbs, fats, protein, calories, location: null });
-                });
+    getLocationName(lat, lon, function(locationName) {
+        saveMeal({ imageData, timestamp, comment: commentInput, weight, carbs, fats, protein, calories, location: { lat, lon, name: locationName } });
+    });
+}, error => {
+    console.log("Geolocation error:", error);
+    saveMeal({ imageData, timestamp, comment: commentInput, weight, carbs, fats, protein, calories, location: { lat: null, lon: null, name: "Location Not Available" } });
+});
             };
             reader.readAsDataURL(fileInput.files[0]);
         }
+
+        function getLocationName(lat, lon, callback) {
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.address) {
+                let locationName = data.address.suburb || data.address.city || data.address.town || data.address.village || "Unknown Location";
+                callback(locationName);
+            } else {
+                callback("Unknown Location");
+            }
+        })
+        .catch(() => callback("Unknown Location"));
+}
 
         function saveMeal(meal) {
             let transaction = db.transaction(["meals"], "readwrite");
@@ -119,7 +133,7 @@
                         <img src="${meal.imageData}" alt="Meal">
                         <p>${meal.timestamp}</p>
                         <p>${meal.comment}</p>
-                        ${meal.location ? `<p>📍 ${meal.location.lat}, ${meal.location.lon}</p>` : ""}
+                        ${meal.location ? `<p>📍 ${meal.location.name} (${meal.location.lat.toFixed(3)}, ${meal.location.lon.toFixed(3)})</p>` : ""}
                         <p><b>Weight:</b> ${meal.weight}g</p>
                         <p><b>Carbs:</b> ${meal.carbs}g | <b>Fats:</b> ${meal.fats}g</p>
                         <p><b>Protein:</b> ${meal.protein}g | <b>Calories:</b> ${meal.calories} kcal</p>
