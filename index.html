@@ -6,27 +6,28 @@
     <title>OMAD Meal Tracker</title>
     <style>
         body {
-            font-family: Arial, sans-serif; 
+            font-family: 'Arial', sans-serif; 
             text-align: center; 
             margin: 20px; 
-            background-color: #f5f5f5;
+            background-color: #fdf6f0; 
+            color: #333;
         }
         .grid {
             display: grid; 
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); 
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); 
             gap: 15px; 
             padding: 20px;
         }
         .meal {
             border-radius: 10px;
             box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
-            background: white;
-            padding: 10px;
+            background: #ffebcd; /* Pastel beige */
+            padding: 15px;
             position: relative;
         }
         img {
             width: 100%; 
-            max-height: 150px; 
+            max-height: 200px; 
             object-fit: cover; 
             border-radius: 8px;
         }
@@ -34,8 +35,9 @@
             width: 90%; 
             margin: 5px 0; 
             padding: 8px; 
-            border: 1px solid #ccc; 
-            border-radius: 5px;
+            border: 1px solid #ddd; 
+            border-radius: 5px; 
+            background: #fef9e7; /* Soft pastel yellow */
         }
         button {
             padding: 8px 12px;
@@ -43,11 +45,12 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
+            transition: 0.3s;
         }
-        .save-btn { background: #28a745; color: white; }
-        .export-btn { background: #007bff; color: white; }
+        .save-btn { background: #a3c4bc; color: white; } /* Soft teal */
+        .export-btn { background: #ffb6b9; color: white; } /* Soft pink */
         .delete-btn {
-            background: red; 
+            background: #ff7070; /* Soft red */
             color: white; 
             border: none; 
             padding: 5px; 
@@ -127,7 +130,7 @@
             const reader = new FileReader();
             reader.onload = function(event) {
                 const imageData = event.target.result;
-                const timestamp = new Date().toLocaleString();
+                const timestamp = new Date().toISOString(); // Store as ISO format for sorting
 
                 navigator.geolocation.getCurrentPosition(position => {
                     let lat = position.coords.latitude;
@@ -164,6 +167,7 @@
 
             request.onsuccess = function() {
                 let meals = request.result;
+                meals.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Newest first
 
                 meals.forEach(meal => {
                     const mealDiv = document.createElement("div");
@@ -171,7 +175,7 @@
                     mealDiv.innerHTML = `
                         <button class="delete-btn" onclick="deleteMeal(${meal.id})">X</button>
                         <img src="${meal.imageData}" alt="Meal">
-                        <p>${meal.timestamp}</p>
+                        <p>${new Date(meal.timestamp).toLocaleString()}</p>
                         <p>${meal.comment}</p>
                         ${meal.location ? `<p>📍 ${meal.location.name} (${meal.location.lat.toFixed(3)}, ${meal.location.lon.toFixed(3)})</p>` : ""}
                         <p><b>Weight:</b> ${meal.weight}g</p>
